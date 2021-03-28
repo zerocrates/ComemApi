@@ -4,6 +4,7 @@ namespace ComemApi;
 use ComemApi\BlockProxy;
 use ComemApi\RepresentationProxy;
 use Omeka\Module\AbstractModule;
+use Omeka\Stdlib\DateTime;
 use Zend\EventManager\Event;
 use Zend\EventManager\SharedEventManagerInterface;
 
@@ -21,6 +22,12 @@ class Module extends AbstractModule
             'Omeka\Api\Representation\SitePageRepresentation',
             'rep.resource.json',
             [$this, 'enhanceSitePageApi']
+        );
+
+        $events->attach(
+            'Omeka\Api\Representation\SiteRepresentation',
+            'rep.resource.json',
+            [$this, 'enhanceSiteApi']
         );
     }
 
@@ -98,6 +105,37 @@ class Module extends AbstractModule
             $json['o:block'][$blockIndex] = new BlockProxy($block, $extraAttachmentData);
         }
 
+        $e->setParam('jsonLd', $json);
+    }
+
+    /**
+     * Enhance the API output for sites
+     *
+     * - Append "created" key to o:page entries
+     * - Append "title" key to o:page entries
+     *
+     * @param Event $e
+     */
+    public function enhanceSiteApi(Event $e)
+    {
+        $json = $e->getParam('jsonLd');
+        $siteRep = $e->getTarget();
+
+        $pages = $siteRep->pages();
+        $extraDataById = [];
+
+        foreach ($pages as $page) {
+            $extraDataById[$page->id()] = [
+                'created' => new DateTime($page->created()),
+                'title' => $page->title(),
+            ];
+        }
+
+        foreach ($json['o:page'] as $index => $pageRef) {
+            $id = $pageRef->id();
+            $json['o:page'][$index] = new RepresentationProxy($pageRef,
+                $extraDataById[$id]);
+        }
         $e->setParam('jsonLd', $json);
     }
 }
